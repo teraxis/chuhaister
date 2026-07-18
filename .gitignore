@@ -4,3 +4,5 @@
 *.obj
 dist/
 __pycache__/
+*.pdb
+*.lib
