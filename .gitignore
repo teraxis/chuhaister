@@ -1,0 +1,6 @@
+# build outputs
+*.exe
+*.res
+*.obj
+dist/
+__pycache__/
