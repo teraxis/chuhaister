@@ -312,7 +312,8 @@ static std::map<int, UsageCache> g_usageCache;
 static const int USAGE_TTL_ACTIVE = 60;   // seconds
 static const int USAGE_TTL_IDLE = 300;
 
-static bool accountUsage(cswap::Vault& v, const cswap::Account& a, bool active, cswap::Usage& out) {
+static bool accountUsage(cswap::Vault& v, const cswap::Account& a, bool active,
+                         const cswap::LiveState& live, cswap::Usage& out) {
     UsageCache& c = g_usageCache[a.num];
     time_t now = time(nullptr);
     if (c.valid && now - c.fetchedAt < (active ? USAGE_TTL_ACTIVE : USAGE_TTL_IDLE)) {
@@ -321,13 +322,19 @@ static bool accountUsage(cswap::Vault& v, const cswap::Account& a, bool active, 
     }
     auto serveStale = [&]() { if (c.valid) { out = c.usage; return true; } return false; };
 
+    // For the active account the live file is the source of truth — Claude Code
+    // keeps its token fresh and owns its rotation. Reading the vault copy and
+    // refreshing it ourselves would rotate a shared refresh token twice and
+    // invalidate the live login. Inactive accounts are ours to refresh.
     std::string credJson;
-    if (!v.readCred(a.num, credJson)) return serveStale();
+    bool fromLive = active && live.haveCred && live.haveIdentity && live.email == a.email;
+    if (fromLive) credJson = live.credJson;
+    else if (!v.readCred(a.num, credJson)) return serveStale();
+
     cswap::OAuthCred cred = cswap::parseCredentials(credJson);
     if (!cred.valid) return serveStale();
     if (cswap::tokenExpired(cred)) {
-        // Only stored (inactive) tokens are ours to rotate; the live one is
-        // Claude Code's business.
+        if (fromLive) return serveStale();  // Claude Code will refresh the live token
         if (cswap::refreshCredentials(cred) != cswap::RefreshError::None) return serveStale();
         v.writeCred(a.num, cswap::serializeCredentials(cred));
     }
@@ -357,6 +364,10 @@ static Model buildModel() {
     // switch back to it restores Claude Code's own fields rather than a
     // synthesized stub. No-op once stored and unchanged.
     cswap::captureLiveProfile(v, live);
+    // Keep the active account's stored credential in step with Claude Code's
+    // live refresh-token rotation, so it doesn't die after a reboot without a
+    // switch (see captureLiveCredential).
+    cswap::captureLiveCredential(v, live);
     for (const cswap::Account& a : v.accounts) {
         Acct acc;
         acc.num = a.num;
@@ -365,7 +376,7 @@ static Model buildModel() {
         acc.active = live.haveIdentity && live.email == a.email;
         acc.disabled = a.disabled;
         cswap::Usage u;
-        if (accountUsage(v, a, acc.active, u)) {
+        if (accountUsage(v, a, acc.active, live, u)) {
             if (u.fiveHour.present) addRow(acc, L"5-hour limit", u.fiveHour.pct, u.fiveHour.resetsAt);
             if (u.sevenDay.present) addRow(acc, L"Weekly · all models", u.sevenDay.pct, u.sevenDay.resetsAt);
             for (const cswap::ScopedWindow& s : u.scoped)

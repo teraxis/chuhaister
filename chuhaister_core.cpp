@@ -71,7 +71,8 @@ static int cmdAddCurrent(Vault& v) {
 
 static int cmdList(Vault& v) {
     LiveState live = readLiveState();
-    captureLiveProfile(v, live);  // opportunistic; see switcher.h
+    captureLiveProfile(v, live);     // opportunistic; see switcher.h
+    captureLiveCredential(v, live);  // keep the active account's token current
     if (v.accounts.empty()) {
         printf("no managed accounts (run: cswap-core add-current)\n");
         return 0;

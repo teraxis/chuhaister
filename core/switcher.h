@@ -102,6 +102,36 @@ inline bool captureLiveProfile(Vault& v, const LiveState& live) {
     return v.writeAcctJson(acc->num, live.rawOauthAccount);
 }
 
+// Mirror the live credential into the active account's vault slot.
+//
+// Claude Code owns ~/.claude/.credentials.json and rotates the OAuth refresh
+// token there (single-use rotation: each refresh invalidates the previous
+// token). The vault holds its own copy of that credential, which only gets
+// re-synced during a switch. So if the user works on an account and then shuts
+// down (or the machine reboots) without switching through the app, Claude
+// Code's rotations move past the vault's copy, and the stored refresh token is
+// dead the next time that account goes inactive — the account shows up as
+// "usage unavailable" and needs a re-login.
+//
+// Calling this on every refresh keeps the stored copy in step with the live
+// one, so the vault always has the current refresh token. Writes only when the
+// tokens actually changed. Returns true if something was saved.
+inline bool captureLiveCredential(Vault& v, const LiveState& live) {
+    if (!live.haveCred || !live.haveIdentity) return false;
+    OAuthCred c = parseCredentials(live.credJson);
+    if (!c.valid) return false;               // API-key / sentinel live login: skip
+    Account* acc = v.byEmail(live.email);
+    if (!acc) return false;
+    std::string stored;
+    if (v.readCred(acc->num, stored)) {
+        OAuthCred s = parseCredentials(stored);
+        if (s.valid && s.accessToken == c.accessToken && s.refreshToken == c.refreshToken)
+            return false;                     // already current — no disk churn
+    }
+    VaultLock lock;
+    return v.writeCred(acc->num, live.credJson);
+}
+
 // Capture the current live login into the vault (add or update-in-place).
 // Identity comes from ~/.claude.json's oauthAccount. Returns the account
 // number, or 0 on failure with `err` set.

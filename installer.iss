@@ -78,13 +78,18 @@ ukrainian.AutoStartTask=Запускати claude-swap під час входу 
 
 [Code]
 // The account store holds the user's Claude credentials. Uninstalling the app
-// must not silently destroy them, so ask, and default to keeping.
+// must never destroy them without an explicit, interactive Yes.
+//
+// A silent uninstall (as an upgrade/reinstall runs) MUST leave the store alone:
+// under /SUPPRESSMSGBOXES a Yes/No box returns Yes, so a prompt here would wipe
+// the credentials on every reinstall. Bail out before asking when silent.
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   VaultDir: String;
 begin
   if CurUninstallStep = usPostUninstall then
   begin
+    if UninstallSilent then Exit;
     VaultDir := ExpandConstant('{%USERPROFILE}\.cswap');
     if DirExists(VaultDir) then
     begin
