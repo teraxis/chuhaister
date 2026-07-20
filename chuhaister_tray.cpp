@@ -57,7 +57,7 @@ using namespace Gdiplus;
 // ---------------------------------------------------------------- constants
 
 static const wchar_t* APP_NAME = L"chuhAIster";
-static const wchar_t* APP_VERSION = L"0.1.0";
+static const wchar_t* APP_VERSION = L"0.1.1";
 static const wchar_t* APP_URL = L"https://github.com/teraxis/chuhaister";
 static const wchar_t* MUTEX_NAME = L"Local\\chuhaister-single-instance";
 static const wchar_t* AUTOSTART_VALUE = L"chuhAIster";
