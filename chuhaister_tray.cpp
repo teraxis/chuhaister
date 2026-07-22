@@ -57,7 +57,7 @@ using namespace Gdiplus;
 // ---------------------------------------------------------------- constants
 
 static const wchar_t* APP_NAME = L"chuhAIster";
-static const wchar_t* APP_VERSION = L"0.1.1";
+static const wchar_t* APP_VERSION = L"0.1.2";
 static const wchar_t* APP_URL = L"https://github.com/teraxis/chuhaister";
 static const wchar_t* MUTEX_NAME = L"Local\\chuhaister-single-instance";
 static const wchar_t* AUTOSTART_VALUE = L"chuhAIster";
@@ -323,9 +323,7 @@ static bool accountUsage(cswap::Vault& v, const cswap::Account& a, bool active,
     auto serveStale = [&]() { if (c.valid) { out = c.usage; return true; } return false; };
 
     // For the active account the live file is the source of truth — Claude Code
-    // keeps its token fresh and owns its rotation. Reading the vault copy and
-    // refreshing it ourselves would rotate a shared refresh token twice and
-    // invalidate the live login. Inactive accounts are ours to refresh.
+    // keeps its token fresh. For inactive accounts we use the stored copy.
     std::string credJson;
     bool fromLive = active && live.haveCred && live.haveIdentity && live.email == a.email;
     if (fromLive) credJson = live.credJson;
@@ -333,11 +331,14 @@ static bool accountUsage(cswap::Vault& v, const cswap::Account& a, bool active,
 
     cswap::OAuthCred cred = cswap::parseCredentials(credJson);
     if (!cred.valid) return serveStale();
-    if (cswap::tokenExpired(cred)) {
-        if (fromLive) return serveStale();  // Claude Code will refresh the live token
-        if (cswap::refreshCredentials(cred) != cswap::RefreshError::None) return serveStale();
-        v.writeCred(a.num, cswap::serializeCredentials(cred));
-    }
+    // Never refresh a token here. The OAuth refresh grant is single-use and
+    // rotates, so refreshing an account that another app is also signed into
+    // (Antigravity, the Claude Code CLI, the desktop app) would rotate the
+    // shared token past that app's copy and break its session with a 401.
+    // Only Claude Code refreshes, and only for whichever account is live. If a
+    // stored access token has expired, we simply show no usage for that account
+    // until it becomes active again — never trade a working login for a number.
+    if (cswap::tokenExpired(cred)) return serveStale();
     cswap::Usage u = cswap::fetchUsage(cred.accessToken);
     if (!u.ok) return serveStale();
     c.usage = u;

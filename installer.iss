@@ -7,7 +7,7 @@
 ; Build:  "D:\Tools\InnoSetup\ISCC.exe" installer.iss   (see build.ps1 installer)
 
 #define AppName      "chuhAIster"
-#define AppVersion   "0.1.1"
+#define AppVersion   "0.1.2"
 #define AppPublisher "Bilyk Ihor"
 #define AppURL       "https://github.com/teraxis/chuhaister"
 #define TrayExe      "chuhaister-tray.exe"
